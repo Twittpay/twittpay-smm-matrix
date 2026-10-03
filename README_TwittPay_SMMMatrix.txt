@@ -40,9 +40,6 @@
 
    4. Admin -> Payment Gateways -> open "Bkash/Nagad/Rocket/Upay" and fill in:
 
-        Endpoint URL      your own gateway address, e.g.
-                          https://checkout.twittpay.com
-                          (the API host shown on your gateway's developer page)
 
         Brand Key           from your gateway dashboard, under Brands
 
@@ -66,8 +63,6 @@
    * A payment worth less than the deposit is refused.
 
  WHAT TO WATCH
-   * The Endpoint URL is your API host. Pasting the whole endpoint or a trailing
-     /api is fine - only the scheme and host are used.
    * The ipn route must be reachable from the internet. Your gateway's server
      calls it directly.
    * This module sends the user back to the ipn route as well, so a deposit still
