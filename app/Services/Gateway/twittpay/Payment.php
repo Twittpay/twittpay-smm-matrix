@@ -23,7 +23,7 @@ class Payment
         $params = $gateway->parameters;
 
         throw_if(
-            empty($params->api_key ?? "") || empty($params->api_url ?? ""),
+            empty($params->api_key ?? ""),
             "This payment method is not fully configured yet."
         );
 
