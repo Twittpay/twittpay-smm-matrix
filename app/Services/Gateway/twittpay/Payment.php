@@ -28,13 +28,12 @@ class Payment
         );
 
         $requestData = [
-            'cus_name'    => optional($deposit->user)->username ?? "Default Name",
-            'cus_email'   => optional($deposit->user)->email ?? "default@gmail.com",
+            ...self::customerFields($deposit),
             'amount'      => number_format(round($deposit->payable_amount, 2), 2, '.', ''),
             'success_url' => route('ipn', [$gateway->code, $deposit->trx_id]),
             'cancel_url'  => route('failed'),
             'webhook_url' => route('ipn', [$gateway->code, $deposit->trx_id]),
-            'metadata'    => [
+            'meta_data'   => [
                 'trx_id' => (string) $deposit->trx_id,
                 'source' => 'smm-matrix',
             ],
@@ -224,11 +223,11 @@ class Payment
     /** metadata comes back from verify as a JSON string. */
     protected static function metadata($verified)
     {
-        if (!is_array($verified) || !isset($verified['metadata'])) {
+        if (!is_array($verified) || (!isset($verified['meta_data']) && !isset($verified['metadata']))) {
             return [];
         }
 
-        $meta = $verified['metadata'];
+        $meta = $verified['meta_data'] ?? $verified['metadata'];
 
         if (is_array($meta)) {
             return $meta;
@@ -259,20 +258,57 @@ class Payment
     }
 
     /** One POST to the API. JSON in, array out. */
+    /**
+     * Real customer details only. TwittPay never accepts made-up values: a field the
+     * user does not have is left out and TwittPay asks the customer for it.
+     */
+    public static function customerFields($deposit): array
+    {
+        $u = $deposit->user ?? null;
+        $out = [];
+        $name = trim((string)($u->fullname ?? ''));
+        if ($name === '') {
+            $name = trim(trim((string)($u->firstname ?? '')) . ' ' . trim((string)($u->lastname ?? '')));
+        }
+        if ($name === '') {
+            $name = trim((string)($u->username ?? ''));
+        }
+        if ($name !== '') {
+            $out['cus_name'] = $name;
+        }
+        $email = trim((string)($u->email ?? ''));
+        if ($email !== '') {
+            $out['cus_email'] = $email;
+        }
+        $digits = preg_replace('/\D+/', '', (string)($u->phone_code ?? '') . (string)($u->phone ?? ''));
+        if (strpos($digits, '880') === 0) {
+            $digits = '0' . ltrim(substr($digits, 3), '0');
+        } elseif (preg_match('/^1\d{9}$/', $digits)) {
+            $digits = '0' . $digits;
+        }
+        if (preg_match('/^01\d{9}$/', $digits)) {
+            $out['cus_phone'] = $digits;
+        }
+        $addr = trim(trim((string)($u->address_one ?? '')) . ' ' . trim((string)($u->address_two ?? '')));
+        if ($addr !== '') {
+            $out['cus_address'] = $addr;
+        }
+        return $out;
+    }
+
     protected static function apiCall($endpoint, $payload, $params)
     {
         // metadata has to arrive as a JSON object; a PHP list would encode as an
         // array and be rejected.
-        if (isset($payload['metadata'])) {
-            $payload['metadata'] = (object) $payload['metadata'];
+        if (isset($payload['meta_data'])) {
+            $payload['meta_data'] = (object) $payload['meta_data'];
         }
 
-        $curl = curl_init();
-
-        curl_setopt_array($curl, [
+        $options = [
             CURLOPT_URL            => self::baseUrl($params) . $endpoint,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_TIMEOUT        => 25,
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => json_encode($payload),
             CURLOPT_HTTPHEADER     => [
@@ -280,11 +316,25 @@ class Payment
                 "Accept: application/json",
                 "Content-Type: application/json",
             ],
-        ]);
+        ];
 
-        $response = curl_exec($curl);
-        $error    = curl_error($curl);
-        curl_close($curl);
+        // A short outage (DNS hiccup, refused connection) is retried up to 3 times.
+        // Any real answer from the gateway is returned at once and never retried.
+        $retryable = [6, 7, 35];
+        $response  = false;
+        $error     = '';
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $curl = curl_init();
+            curl_setopt_array($curl, $options);
+            $response = curl_exec($curl);
+            $error    = curl_error($curl);
+            $errno    = curl_errno($curl);
+            curl_close($curl);
+            if (!$error || !in_array($errno, $retryable, true) || $attempt === 3) {
+                break;
+            }
+            sleep($attempt);
+        }
 
         if ($error) {
             throw new Exception("Connection error: " . $error);

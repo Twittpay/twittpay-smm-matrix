@@ -31,6 +31,12 @@ Payments are always re-verified on your server before an order or invoice is mar
    the panel - delete them from the server after you are done, or do not upload
    them at all.
 
+ BEFORE YOU START (TwittPay dashboard)
+   Your gateway only accepts payment requests from a verified domain and an
+   allowed server IP. In the dashboard open Brands -> Domains, add and verify
+   your panel's domain, and add your server's IP address. Without this the
+   gateway answers "no_domain_rule" or "ip_not_allowed" and no payment starts.
+   When you move to another host, add the new server IP first.
  INSTALL - FOUR STEPS
 
    1. Upload and extract at the panel root as above.
@@ -58,9 +64,6 @@ Payments are always re-verified on your server before an order or invoice is mar
 
    4. Admin -> Payment Gateways -> open "Bkash/Nagad/Rocket/Upay" and fill in:
 
-        Endpoint URL      your own gateway address, e.g.
-                          https://checkout.twittpay.com
-                          (the API host shown on your gateway's developer page)
 
         Brand Key           from your gateway dashboard, under Brands
 
@@ -84,8 +87,7 @@ Payments are always re-verified on your server before an order or invoice is mar
    * A payment worth less than the deposit is refused.
 
  WHAT TO WATCH
-   * The Endpoint URL is your API host. Pasting the whole endpoint or a trailing
-     /api is fine - only the scheme and host are used.
+   * The API host is fixed to https://checkout.twittpay.com. There is no Endpoint URL field.
    * The ipn route must be reachable from the internet. Your gateway's server
      calls it directly.
    * This module sends the user back to the ipn route as well, so a deposit still
